@@ -87,9 +87,13 @@ class MapApp extends HTMLElement {
     // node-by-node so every element lands in the SVG namespace.
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('width', '0');
-    svg.setAttribute('height', '0');
-    svg.style.position = 'absolute';
+    // Keep a 1×1 footprint (not 0×0 / display:none) so some WebViews keep the
+    // <mask> resource live and referenceable. The mask content lives in <defs>
+    // and is never painted anyway.
+    svg.setAttribute('width', '1');
+    svg.setAttribute('height', '1');
+    svg.style.cssText =
+      'position:absolute;top:0;left:0;width:1px;height:1px;overflow:hidden;pointer-events:none;';
 
     const defs = document.createElementNS(NS, 'defs');
     const mask = document.createElementNS(NS, 'mask');
@@ -107,8 +111,18 @@ class MapApp extends HTMLElement {
     svg.appendChild(defs);
     this.appendChild(svg);
 
-    revealPane.style.webkitMaskImage = `url(#${this._maskId})`;
-    revealPane.style.maskImage = `url(#${this._maskId})`;
+    this._revealPane = revealPane;
+    this._applyMaskRef();
+  }
+
+  // Reference the mask by an ABSOLUTE same-document URL rather than a bare
+  // `url(#id)`. The Android System WebView (Capacitor serves from
+  // https://localhost/) fails to resolve the bare fragment for CSS masks,
+  // leaving the colored layer unmasked; the absolute form resolves everywhere.
+  _applyMaskRef() {
+    const ref = `url("${location.href.split('#')[0]}#${this._maskId}")`;
+    this._revealPane.style.webkitMaskImage = ref;
+    this._revealPane.style.maskImage = ref;
   }
 
   // Build the SVG path `d` for one stroke, in current layer points.
