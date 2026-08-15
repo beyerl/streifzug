@@ -14,6 +14,12 @@ const TOOLS = [
     icon: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
   },
   {
+    id: 'erase',
+    label: 'Radieren',
+    // eraser
+    icon: `<path d="M20 20H8.5L3.5 15a2 2 0 0 1 0-2.8l8-8a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L14 20"/><path d="M8.5 20 16 12.5"/>`,
+  },
+  {
     id: 'marker',
     label: 'Marker',
     // map pin
@@ -47,8 +53,8 @@ template.innerHTML = `
       flex-direction: column;
       align-items: center;
       gap: 3px;
-      width: 68px;
-      padding: 8px 4px;
+      width: 60px;
+      padding: 8px 2px;
       background: transparent;
       border: none;
       border-radius: 12px;

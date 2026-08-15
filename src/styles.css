@@ -43,7 +43,8 @@ map-app {
 }
 
 /* Draw mode: hide the grab cursor, use a crosshair over the map. */
-map-app[data-tool="draw"] .leaflet-container {
+map-app[data-tool="draw"] .leaflet-container,
+map-app[data-tool="erase"] .leaflet-container {
   cursor: crosshair;
 }
 map-app[data-tool="marker"] .leaflet-container {
