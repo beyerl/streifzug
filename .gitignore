@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-ssr/
+
+# Capacitor native project is generated in CI (npx cap add android).
+android/
+ios/
+
+# Editor / OS noise
+.DS_Store
+*.log
+.env
+.env.*
+.vite/

@@ -1,0 +1,146 @@
+:root {
+  --accent: #e0532d;
+  --bg: #1b1b1b;
+  --panel: rgba(28, 28, 28, 0.92);
+  --panel-fg: #f2f2f2;
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --active: var(--accent);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--panel-fg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+map-app {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  background: #2a2a2a;
+}
+
+/* Grayscale only the map tiles; overlays (drawings) and markers stay colored. */
+.leaflet-tile-pane {
+  filter: grayscale(1) contrast(1.05) brightness(0.98);
+}
+
+/* Draw mode: hide the grab cursor, use a crosshair over the map. */
+map-app[data-tool="draw"] .leaflet-container {
+  cursor: crosshair;
+}
+map-app[data-tool="marker"] .leaflet-container {
+  cursor: pointer;
+}
+
+.leaflet-container {
+  background: #2a2a2a;
+}
+
+/* Hide Leaflet's default zoom control — we ship our own. */
+.leaflet-control-zoom {
+  display: none;
+}
+
+/* Marker label popup styling */
+.leaflet-popup-content {
+  margin: 8px 12px;
+  font-size: 14px;
+}
+
+/* Marker pin divIcon has no background of its own. */
+.sk-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Permanent label tooltip under/above markers. */
+.leaflet-tooltip.sk-tip {
+  background: var(--panel);
+  color: var(--panel-fg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.leaflet-tooltip.sk-tip::before {
+  display: none; /* hide the little arrow, keep it clean */
+}
+
+/* Popup contents (label editor / delete confirm). */
+.sk-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 160px;
+}
+.sk-popup input {
+  width: 100%;
+  font-size: 15px;
+  padding: 7px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  outline: none;
+}
+.sk-popup input:focus {
+  border-color: var(--accent);
+}
+.sk-popup .sk-msg {
+  font-size: 14px;
+}
+.sk-popup .sk-row {
+  display: flex;
+  gap: 6px;
+}
+.sk-popup .sk-btn {
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #f4f4f4;
+  color: #1b1b1b;
+  font-size: 14px;
+  cursor: pointer;
+}
+.sk-popup .sk-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sk-popup .sk-btn.danger {
+  color: #c1361a;
+}
+
+/* Selected marker (deletable) gets a pulsing ring. */
+.marker-selected {
+  filter: drop-shadow(0 0 0 var(--accent));
+  animation: marker-pulse 1s ease-in-out infinite;
+}
+@keyframes marker-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px var(--accent));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px var(--accent));
+  }
+}
