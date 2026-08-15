@@ -1,6 +1,6 @@
 {
   "name": "streifzug",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Grayscale map to draw visited areas and mark future trip destinations.",
   "type": "module",
   "scripts": {
