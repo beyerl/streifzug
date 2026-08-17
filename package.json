@@ -1,24 +1,24 @@
 {
   "name": "streifzug",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Grayscale map to draw visited areas and mark future trip destinations.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "cap:sync": "cap sync android",
-    "android:build": "npm run build && cap sync android"
+    "preview": "vite preview"
   },
-  "keywords": ["map", "leaflet", "openstreetmap", "capacitor", "web-components"],
+  "keywords": [
+    "map",
+    "leaflet",
+    "openstreetmap",
+    "web-components"
+  ],
   "license": "MIT",
   "dependencies": {
-    "@capacitor/core": "^6.1.2",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/cli": "^6.1.2",
     "vite": "^5.4.8"
   }
 }
