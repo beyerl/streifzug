@@ -17,9 +17,8 @@ build. The whole UI state — map view, drawings and markers — lives in
   - **Verschieben** (move, default) — pan the map.
   - **Zeichnen** (draw) — paint over the map with your finger/mouse to turn those
     areas **from black & white to full colour** (a second, colour copy of the
-    tiles, composited per-tile in a canvas so only painted pixels stay coloured —
-    no SVG/CSS mask, which is why it also works in the Android WebView). The
-    reveal reprojects and persists across zoom.
+    tiles revealed through an SVG mask). The reveal reprojects and persists across
+    zoom.
   - **Radieren** (erase) — paint back over coloured areas to return them to
     black & white.
   - **Marker** — tap to drop a labelled pin. **Long-press** a marker (or

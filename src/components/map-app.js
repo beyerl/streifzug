@@ -1,13 +1,12 @@
 // <map-app>: the whole application. Owns the Leaflet map, the paint/erase reveal
 // tool, the markers and the overlay UI, mirroring everything into localStorage.
 //
-// The "reveal" effect: the base tiles are grayscale. A RevealLayer draws a
-// colored copy of the tiles on top, but keeps only the painted areas (canvas
-// compositing), so painting turns the map from black & white to color and
-// erasing turns it back.
+// The "reveal" effect: the base tiles are rendered grayscale. A second, colored
+// copy of the tiles sits on top, masked by an SVG whose white areas are the
+// painted strokes and black areas the erased ones. So painting turns the map
+// from black & white to color, and erasing turns it back.
 import L from 'leaflet';
 import { loadState, saveState, uid } from '../store.js';
-import { RevealLayer } from './reveal-layer.js';
 
 const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTR =
@@ -33,6 +32,7 @@ const MARKER_ICON = L.divIcon({
 class MapApp extends HTMLElement {
   connectedCallback() {
     this._state = loadState();
+    this._maskId = 'reveal-mask-' + Math.random().toString(36).slice(2, 8);
     this._past = []; // undo snapshots (most recent last), capped at HISTORY_LIMIT
     this._future = []; // redo snapshots
 
@@ -52,17 +52,13 @@ class MapApp extends HTMLElement {
     // Base grayscale tiles.
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(this._map);
 
-    // Colored reveal on a pane above, painted only inside the strokes.
+    // Colored copy on a pane above, masked to the painted areas only.
     this._map.createPane('reveal');
     const revealPane = this._map.getPane('reveal');
     revealPane.style.zIndex = 250;
     revealPane.style.pointerEvents = 'none';
-    this._reveal = new RevealLayer(TILE_URL, {
-      pane: 'reveal',
-      maxZoom: 19,
-      subdomains: 'abc',
-      updateWhenIdle: false,
-    }).addTo(this._map);
+    L.tileLayer(TILE_URL, { maxZoom: 19, pane: 'reveal' }).addTo(this._map);
+    this._buildMaskEl(revealPane);
 
     this._markerLayer = L.layerGroup().addTo(this._map);
 
@@ -76,30 +72,96 @@ class MapApp extends HTMLElement {
     this._restore();
     this._wireEvents();
     this._setTool(this._state.tool || 'move');
-    this._reveal.setStrokes(this._state.strokes);
+    this._refreshMask();
     this._updateHistoryButtons();
 
     // The map is created before layout settles; nudge it once painted.
     requestAnimationFrame(() => this._map.invalidateSize());
   }
 
-  // ----- reveal rendering ---------------------------------------------------
+  // ----- reveal mask --------------------------------------------------------
 
-  // Strokes to render = committed strokes plus the in-progress one, if any.
-  _renderReveal() {
-    const strokes = this._stroke
-      ? this._state.strokes.concat([this._stroke])
-      : this._state.strokes;
-    this._reveal.setStrokes(strokes);
+  _buildMaskEl(revealPane) {
+    // A hidden SVG holding the mask definition. Coordinates are Leaflet layer
+    // points (userSpaceOnUse), matching how the panes are positioned. Built
+    // node-by-node so every element lands in the SVG namespace.
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    // Keep a 1×1 footprint (not 0×0 / display:none) so some WebViews keep the
+    // <mask> resource live and referenceable. The mask content lives in <defs>
+    // and is never painted anyway.
+    svg.setAttribute('width', '1');
+    svg.setAttribute('height', '1');
+    svg.style.cssText =
+      'position:absolute;top:0;left:0;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+
+    const defs = document.createElementNS(NS, 'defs');
+    const mask = document.createElementNS(NS, 'mask');
+    mask.setAttribute('id', this._maskId);
+    mask.setAttribute('maskUnits', 'userSpaceOnUse');
+    mask.setAttribute('maskContentUnits', 'userSpaceOnUse');
+    mask.setAttribute('x', '-500000');
+    mask.setAttribute('y', '-500000');
+    mask.setAttribute('width', '1000000');
+    mask.setAttribute('height', '1000000');
+
+    this._maskG = document.createElementNS(NS, 'g');
+    mask.appendChild(this._maskG);
+    defs.appendChild(mask);
+    svg.appendChild(defs);
+    this.appendChild(svg);
+
+    this._revealPane = revealPane;
+    this._applyMaskRef();
   }
 
-  // Coalesce the flood of pointermove updates into one repaint per frame.
-  _scheduleReveal() {
-    if (this._revealRaf) return;
-    this._revealRaf = requestAnimationFrame(() => {
-      this._revealRaf = null;
-      this._renderReveal();
-    });
+  // Reference the mask by an ABSOLUTE same-document URL rather than a bare
+  // `url(#id)`. The Android System WebView (Capacitor serves from
+  // https://localhost/) fails to resolve the bare fragment for CSS masks,
+  // leaving the colored layer unmasked; the absolute form resolves everywhere.
+  _applyMaskRef() {
+    const ref = `url("${location.href.split('#')[0]}#${this._maskId}")`;
+    this._revealPane.style.webkitMaskImage = ref;
+    this._revealPane.style.maskImage = ref;
+  }
+
+  // Build the SVG path `d` for one stroke, in current layer points.
+  _strokeD(stroke) {
+    let d = '';
+    for (const [lat, lng] of stroke.latlngs) {
+      const p = this._map.latLngToLayerPoint([lat, lng]);
+      d += (d ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1);
+    }
+    // A single point still needs to render as a dot (round cap, zero-length).
+    if (stroke.latlngs.length === 1) {
+      const p = this._map.latLngToLayerPoint(stroke.latlngs[0]);
+      d = `M${p.x.toFixed(1)} ${p.y.toFixed(1)}L${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+    }
+    return d;
+  }
+
+  // Brush width scales with zoom so a stroke covers a stable ground area.
+  _strokeWidth(stroke) {
+    return stroke.width * Math.pow(2, this._map.getZoom() - stroke.zoom);
+  }
+
+  _pathEl(stroke) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', stroke.mode === 'erase' ? '#000' : '#fff');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', this._strokeWidth(stroke).toFixed(1));
+    path.setAttribute('d', this._strokeD(stroke));
+    return path;
+  }
+
+  // Rebuild every stroke (after zoom, undo/redo, restore).
+  _refreshMask() {
+    this._maskG.textContent = '';
+    for (const stroke of this._state.strokes) {
+      this._maskG.appendChild(this._pathEl(stroke));
+    }
   }
 
   // ----- persistence / restore ---------------------------------------------
@@ -146,7 +208,7 @@ class MapApp extends HTMLElement {
 
   _afterHistory() {
     saveState(this._state);
-    this._reveal.setStrokes(this._state.strokes);
+    this._refreshMask();
     this._updateHistoryButtons();
   }
 
@@ -157,7 +219,12 @@ class MapApp extends HTMLElement {
   // ----- event wiring -------------------------------------------------------
 
   _wireEvents() {
-    this._map.on('moveend zoomend viewreset', () => this._persistView());
+    this._map.on('moveend', () => this._persistView());
+    // Layer points change on zoom; re-project the mask to keep it aligned.
+    this._map.on('zoomend viewreset', () => {
+      this._persistView();
+      this._refreshMask();
+    });
     this._map.on('click', (e) => this._onMapClick(e));
 
     this._search.addEventListener('search-submit', (e) => this._onSearch(e.detail.query));
@@ -209,12 +276,13 @@ class MapApp extends HTMLElement {
       width: tool === 'erase' ? ERASE_WIDTH : BRUSH_WIDTH,
       zoom: this._map.getZoom(),
     };
+    this._strokePath = this._pathEl(this._stroke);
+    this._maskG.appendChild(this._strokePath);
     try {
       this._mapEl.setPointerCapture(e.pointerId);
     } catch (_) {
       /* capture is best-effort */
     }
-    this._scheduleReveal();
     e.preventDefault();
   }
 
@@ -225,7 +293,7 @@ class MapApp extends HTMLElement {
     this._lastPt = pt;
     const ll = this._map.containerPointToLatLng(pt);
     this._stroke.latlngs.push([ll.lat, ll.lng]);
-    this._scheduleReveal();
+    this._strokePath.setAttribute('d', this._strokeD(this._stroke));
   }
 
   _onPointerUp(e) {
@@ -233,16 +301,16 @@ class MapApp extends HTMLElement {
     // Even a single tap reveals/erases a dot, so every stroke is kept.
     this._commitStroke(this._stroke);
     this._resetStroke();
-    this._renderReveal();
   }
 
   _cancelStroke() {
+    if (this._strokePath) this._strokePath.remove();
     this._resetStroke();
-    this._renderReveal();
   }
 
   _resetStroke() {
     this._stroke = null;
+    this._strokePath = null;
     this._activePointer = null;
     this._lastPt = null;
   }
